@@ -2,14 +2,10 @@
 import streamlit as st
 import sys
 import os
-
-# 把项目根目录加入路径 (rag/)
-sys.path.append(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
-
-from src .rag.splitter import split_into_chunks
-from src.rag.embedder import embed_chunk
-from src.rag.retriever import save_embeddings, retrieve, rerank
-from src.rag.quiz_generator import Generator
+from .splitter import split_into_chunks
+from .embedder import embed_chunk
+from .retriever import save_embeddings, retrieve, rerank
+from .quiz_generator import Generator
 
 st.set_page_config(
     page_title="数据结构AI助教",
