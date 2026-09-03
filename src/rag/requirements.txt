@@ -6,3 +6,4 @@ pypdf
 langchain
 chromadb
 openai
+torchvision
