@@ -19,11 +19,7 @@ st.caption("基于RAG（检索增强生成）技术，回答数据结构与算�
 
 @st.cache_resource
 def init_rag():
-
-    # 获取当前文件（app.py）所在的目录
-    current_dir = os.path.dirname(os.path.abspath(__file__))
-    # 拼接出 data 文件夹的完整路径
-    DOC_PATH = os.path.join(current_dir, "..", "data", "第一章 绪论.txt")
+    DOC_PATH = "src/rag/data/第一章 绪论.txt"
     chunks = split_into_chunks(DOC_PATH)
     embeddings = [embed_chunk(chunk) for chunk in chunks]
     save_embeddings(chunks, embeddings)
