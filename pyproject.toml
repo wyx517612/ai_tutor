@@ -12,6 +12,7 @@ dependencies = [
     "ipykernel>=7.3.0",
     "sentence-transformers>=5.7.0",
     "streamlit>=1.63.0",
+    "tool>=0.8.0",
 ]
 
 [project.scripts]

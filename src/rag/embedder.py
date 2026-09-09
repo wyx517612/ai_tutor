@@ -1,5 +1,6 @@
 
 import os
+os.environ['HF_ENDPOINT'] = 'https://hf-mirror.com'
 from sentence_transformers import SentenceTransformer
 
 # 设置缓存到临时目录（部署环境可用）
