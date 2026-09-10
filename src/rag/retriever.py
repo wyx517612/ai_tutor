@@ -2,7 +2,7 @@ import chromadb
 from typing import List
 from sentence_transformers import CrossEncoder
 
-chromadb_client=chromadb.EphemeralClient()
+chromadb_client = chromadb.PersistentClient(path="./chroma_db")
 chromadb_collection=chromadb_client.get_or_create_collection(name="default")
 
 def save_embeddings(chunks:list[str],embeddings:list[list[float]])->None:
@@ -13,6 +13,7 @@ def save_embeddings(chunks:list[str],embeddings:list[list[float]])->None:
         ids=ids
     )
 def retrieve(query:str,top_k:int)->list[str]:
+    print(f"🔍 当前向量库中的文档总数：{chromadb_collection.count()}")
     from embedder import embed_chunk
     query_embedding=embed_chunk(query)
     results=chromadb_collection.query(query_embeddings=[query_embedding],n_results=top_k)

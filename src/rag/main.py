@@ -6,13 +6,13 @@ from src .rag .retriever import save_embeddings, retrieve, rerank
 from src .rag .quiz_generator import Generator
 
 # 配置
-DOC_PATH = "data/第一章 绪论.txt"  # 改成你的数据结构教材txt路径
+DOC_PATH = "rag/base_knowledge/data/2024.txt"
 TOP_K = 5
 RERANK_TOP_K = 3
 
 
 def main():
-    print("🚀 数据结构AI助教启动中...")
+    print("🚀 考研助教启动中...")
 
     # 1. 检查环境变量
     if not os.environ.get('DEEPSEEK_API_KEY'):
