@@ -5,12 +5,12 @@ from retriever import save_embeddings, retrieve, rerank
 from quiz_generator import Generator
 import datetime
 import os
+import json
 from langchain_openai import ChatOpenAI
 from langchain.agents import create_agent
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain.tools import tool
 from pypdf import PdfReader
-
 
 # 1. 定义工具（如果不需要时间工具，可以删除）
 @tool
@@ -24,24 +24,68 @@ os.environ["OPENAI_API_KEY"] = os.environ.get('DEEPSEEK_API_KEY')
 os.environ["OPENAI_API_BASE"] = "https://api.deepseek.com/v1"
 
 st.set_page_config(
-    page_title="数据结构AI助教",
+    page_title="考研AI助教",
     page_icon="📚",
     layout="wide"
 )
 
-st.title("📚 数据结构AI助教")
-st.caption("基于RAG（检索增强生成）技术，回答数据结构与算法相关问题")
+st.title("📚 考研AI助教")
+st.caption("基于RAG（检索增强生成）技术，回答408考研相关问题")
 
 
 @st.cache_resource
-def init_rag():
-    DOC_PATH = "rag/base_knowledge/data/2024.txt"
-    chunks = split_into_chunks(DOC_PATH)
-    embeddings = [embed_chunk(chunk) for chunk in chunks]
-    save_embeddings(chunks, embeddings)
+def init_rag():  # TODO: 后续支持多用户知识库隔离
+    # ===== 1. 读取所有基础文档 =====
+    base_dir = "base_knowledge/data"
+    all_chunks = []
+    if not os.path.exists(base_dir):
+        print(f"⚠️ 目录不存在：{base_dir}")
+    else:
+        for filename in os.listdir(base_dir):
+            if filename.endswith(".pdf"):
+                file_path = os.path.join(base_dir, filename)
+                print(f"📖 正在处理：{filename}")
+                try:
+                    reader = PdfReader(file_path)
+                    text = ""
+                    for page in reader.pages:
+                        page_text = page.extract_text()
+                        if page_text:
+                            text += page_text + "\n\n"
+                    chunks = split_into_chunks(text, is_path=False)
+                    all_chunks.extend(chunks)
+                    print(f"   ✅ 已加载：{filename}，共 {len(chunks)} 个文本块")
+                except Exception as e:
+                    print(f"   ❌ 读取失败：{filename}，错误：{e}")
+            elif filename.endswith(".txt"):
+                file_path = os.path.join(base_dir, filename)
+                with open(file_path, "r", encoding="utf-8") as f:
+                    content = f.read()
+                chunks = split_into_chunks(content, is_path=False)
+                all_chunks.extend(chunks)
+                print(f"✅ 已加载：{filename}，共 {len(chunks)} 个文本块")
+
+    # ===== 2. 从磁盘恢复用户上传的chunks =====
+    user_chunks_file = "base_knowledge/user_chunks.json"
+    saved_user_chunks = []
+    if os.path.exists(user_chunks_file):
+        with open(user_chunks_file, "r", encoding="utf-8") as f:
+            saved_user_chunks = json.load(f)
+        print(f"✅ 从磁盘恢复 {len(saved_user_chunks)} 个用户上传的文本块")
+
+    # ===== 3. 向量化并存入数据库（只在向量库为空时执行） =====
+    from retriever import chromadb_collection
+    if chromadb_collection.count() == 0:
+        all_to_embed = all_chunks + saved_user_chunks
+        embeddings = [embed_chunk(chunk) for chunk in all_to_embed]
+        save_embeddings(all_to_embed, embeddings)
+        print(f"✅ 已向量化 {len(all_to_embed)} 个文本块")
+    else:
+        print(f"✅ 向量库已有 {chromadb_collection.count()} 条数据，跳过向量化")
+
     generator = Generator()
 
-    # 初始化 Agent（使用新版 API）
+    # 初始化 Agent
     model = ChatOpenAI(model="deepseek-chat", temperature=0)
     tools = [get_current_time]
     agent = create_agent(
@@ -50,65 +94,35 @@ def init_rag():
         system_prompt="你是一个有用的助手，可以调用工具来回答问题。"
     )
 
-    # 上传文件加载逻辑（从 uploads/ 文件夹加载）
-    uploads_dir = "rag/base_knowledge/uploads"
-    all_chunks = chunks.copy()  # 复制初始chunks
-    if os.path.exists(uploads_dir):
-        for filename in os.listdir(uploads_dir):
-            if filename.endswith(".txt") or filename.endswith(".pdf"):
-                file_path = os.path.join(uploads_dir, filename)
-                try:
-                    if filename.endswith(".txt"):
-                        with open(file_path, 'r', encoding='utf-8') as f:
-                            content = f.read()
-                    else:  # pdf
-                        from pypdf import PdfReader
-                        reader = PdfReader(file_path)
-                        content = ""
-                        for page in reader.pages:
-                            content += page.extract_text()
+    # 只在第一次初始化时设置 session_state
+    if "chunks" not in st.session_state:
+        st.session_state.chunks = all_chunks + saved_user_chunks
+        st.session_state.base_chunks = all_chunks
+        st.session_state.all_chunks = all_chunks + saved_user_chunks
+        st.session_state.user_chunks = saved_user_chunks
 
-                    new_chunks = [chunk.strip() for chunk in content.split('\n\n') if chunk.strip()]
-                    all_chunks.extend(new_chunks)
-                    print(f"✅ 已加载上传文件: {filename}")
-                except Exception as e:
-                    print(f"⚠️ 加载 {filename} 失败: {e}")
-
-    # 重新生成所有向量（包括上传的文件）
-    embeddings = [embed_chunk(chunk) for chunk in all_chunks]
-    save_embeddings(all_chunks, embeddings)
-    generator = Generator()
-
-    st.session_state.chunks = all_chunks
-
-    from retriever import chromadb_collection
-    actual_count = chromadb_collection.count()
-    st.session_state.chunks = all_chunks  # 保留chunks用于检索
-    st.session_state.doc_count = actual_count  # 新增：存储文档数
-
-    # 在 return 之前，确保 chunks 被存入 session_state
-    st.session_state.chunks = all_chunks
-    st.session_state.doc_count = len(all_chunks)
-
-    return all_chunks, generator, agent
+    return all_chunks, saved_user_chunks, generator, agent
 
 
 with st.spinner("🧠 正在加载AI模型，请稍候..."):
     try:
-        chunks, generator, agent = init_rag()
+        base_chunks, saved_user_chunks, generator, agent = init_rag()
         st.success("✅ 系统已就绪！")
     except Exception as e:
         st.error(f"❌ 加载失败：{e}")
         st.stop()
 
+# ===== 兜底：确保 session_state 始终有值（刷新后不丢） =====
+if "base_chunks" not in st.session_state:
+    st.session_state.base_chunks = base_chunks
+    st.session_state.user_chunks = saved_user_chunks
+    st.session_state.all_chunks = base_chunks + saved_user_chunks
+
 with st.sidebar:
     st.header("📊 系统信息")
-    # 从向量数据库直接读取文档数量
-    from retriever import chromadb_collection
-
-    actual_count = chromadb_collection.count()
-    st.metric("知识库文档数", actual_count)
-
+    st.metric("基础资料文档数", len(st.session_state.get("base_chunks", [])))
+    st.metric("用户上传文档数", len(st.session_state.get("user_chunks", [])))
+    st.metric("总计文档数", len(st.session_state.get("all_chunks", [])))
     st.metric("向量维度", 768)
     st.markdown("---")
     st.markdown("### 💡 示例问题")
@@ -130,13 +144,13 @@ with st.sidebar:
         if st.button("📚 加载到知识库", type="primary", use_container_width=True):
             with st.spinner(f"正在处理 {len(uploaded_files)} 个文件..."):
                 # 确保 uploads 文件夹存在
-                if not os.path.exists("rag/base_knowledge/uploads"):
-                    os.makedirs("rag/base_knowledge/uploads")
+                if not os.path.exists("base_knowledge/uploads"):
+                    os.makedirs("base_knowledge/uploads")
 
                 all_text = ""
                 for uploaded_file in uploaded_files:
                     # 1. 保存文件到本地
-                    file_path = os.path.join("rag/base_knowledge/uploads", uploaded_file.name)
+                    file_path = os.path.join("base_knowledge/uploads", uploaded_file.name)
                     with open(file_path, "wb") as f:
                         f.write(uploaded_file.getbuffer())
 
@@ -144,29 +158,37 @@ with st.sidebar:
                     if uploaded_file.type == "application/pdf":
                         reader = PdfReader(uploaded_file)
                         for page in reader.pages:
-                            all_text += page.extract_text()
+                            all_text += page.extract_text() + "\n\n"
                     else:
-                        all_text += uploaded_file.read().decode("utf-8")
-                    all_text += "\n\n"
+                        all_text += uploaded_file.read().decode("utf-8") + "\n\n"
 
                 # 3. 分割并加入向量库
                 new_chunks = [chunk.strip() for chunk in all_text.split('\n\n') if chunk.strip()]
                 new_embeddings = [embed_chunk(chunk) for chunk in new_chunks]
                 save_embeddings(new_chunks, new_embeddings)
 
-                # 4. 更新session_state
-                if "chunks" not in st.session_state:
-                    st.session_state.chunks = []
-                st.session_state.chunks = st.session_state.chunks + new_chunks
+                # 4. 更新 session_state
+                st.session_state.chunks = st.session_state.get("chunks", []) + new_chunks
+                st.session_state.user_chunks = st.session_state.get("user_chunks", []) + new_chunks
+                st.session_state.all_chunks = st.session_state.get("all_chunks", []) + new_chunks
+
+                # 5. 持久化到磁盘（关键：刷新后不丢）
+                user_chunks_file = "base_knowledge/user_chunks.json"
+                existing = []
+                if os.path.exists(user_chunks_file):
+                    with open(user_chunks_file, "r", encoding="utf-8") as f:
+                        existing = json.load(f)
+                existing.extend(new_chunks)
+                with open(user_chunks_file, "w", encoding="utf-8") as f:
+                    json.dump(existing, f, ensure_ascii=False)
+
                 st.success(f"✅ 成功加载 {len(new_chunks)} 个新文本块！")
-                st.cache_resource.clear()
-                st.rerun()
+                st.rerun()  # ← 加上这一行，让页面重新运行，刷新统计数据
 
 query = st.text_input("✏️ 输入你的问题", placeholder="例如：什么是栈？")
 
 # ===== 提问逻辑 =====
 if st.button("🚀 提问", type="primary") and query:
-    # 先判断是否包含时间关键词，走 Agent
     if "几点" in query or "时间" in query or "日期" in query:
         with st.spinner("⏰ 正在查询时间..."):
             result = agent.invoke({"messages": [{"role": "user", "content": query}]})
@@ -176,7 +198,6 @@ if st.button("🚀 提问", type="primary") and query:
                     unsafe_allow_html=True)
         st.caption("💡 该回答通过工具调用生成")
     else:
-        # RAG 流程
         with st.spinner("🔍 正在检索知识库..."):
             retrieved = retrieve(query, top_k=5)
             reranked = rerank(query, retrieved, top_k=3)
