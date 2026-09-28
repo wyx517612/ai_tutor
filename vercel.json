@@ -2,7 +2,10 @@
   "builds": [
     {
       "src": "src/rag/api.py",
-      "use": "@vercel/python"
+      "use": "@vercel/python",
+      "config": {
+        "excludeFiles": "{.venv/**,__pycache__/**,chroma_db/**,base_knowledge/uploads/**,api.log}"
+      }
     }
   ],
   "routes": [
