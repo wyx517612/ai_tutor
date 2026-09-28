@@ -8,7 +8,11 @@ os.environ["TRANSFORMERS_CACHE"] = "C:/Users/w1850/.cache/huggingface"
 # 2. 再 import
 from sentence_transformers import SentenceTransformer
 
-embedding_model = SentenceTransformer("models/text2vec-base-chinese")
+# 直接指向项目内的相对路径，禁用网络检查
+embedding_model = SentenceTransformer(
+    "models/text2vec-base-chinese",
+    local_files_only=True
+)
+
 def embed_chunk(text):
-    """把文本转换成向量"""
-    return embedding_model.encode(text)
+    return embedding_model.encode(text).tolist()
