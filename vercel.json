@@ -1,0 +1,14 @@
+{
+  "builds": [
+    {
+      "src": "src/rag/api.py",
+      "use": "@vercel/python"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/(.*)",
+      "dest": "src/rag/api.py"
+    }
+  ]
+}
