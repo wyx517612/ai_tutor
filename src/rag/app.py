@@ -9,7 +9,9 @@ st.set_page_config(
     page_icon="📚",
     layout="wide"
 )
-
+# 初始化对话历史
+if "chat_history" not in st.session_state:
+    st.session_state.chat_history = []
 
 st.title("📚 考研AI助教")
 st.caption("基于RAG（检索增强生成）技术，回答408考研相关问题")
@@ -120,6 +122,8 @@ if st.button("🚀 提问", type="primary") and query:
             result = response.json()
             answer = result["answer"]
             reranked = result.get("references", [])
+            st.session_state.chat_history.append({"role": "user", "content": query})
+            st.session_state.chat_history.append({"role": "assistant", "content": answer})
         except Exception as e:
             st.error(f"❌ 调用后端失败：{e}")
             st.stop()

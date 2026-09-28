@@ -1,7 +1,7 @@
-# src/generator.py
 import os
 from openai import OpenAI
 from typing import List
+
 
 
 class Generator:
@@ -41,6 +41,36 @@ class Generator:
                 stream=False,
                 temperature=0.3,  # 降低随机性，让回答更准确
             )
-            return response.choices[0].message.content
+            return response.choices[0].message.content,response.usage.prompt_tokens
+        except Exception as e:
+            return f"⚠️ 生成回答失败：{e}"
+
+    def generate_with_history(self, query: str, chunks: List[str], history_text: str) -> str:
+        """基于检索到的chunks和对话历史生成回答"""
+        context = "\n\n".join(chunks)
+
+        prompt = f"""请根据以下对话历史和参考资料回答用户问题。
+
+    对话历史：
+    {history_text}
+
+    参考资料：
+    {context}
+
+    用户问题：{query}
+
+    请结合对话历史理解用户的追问，基于参考资料给出准确且简洁的回答。"""
+
+        try:
+            response = self.client.chat.completions.create(
+                model="deepseek-chat",
+                messages=[
+                    {"role": "system", "content": "你是一个考研助教，能结合对话历史和参考资料回答问题。"},
+                    {"role": "user", "content": prompt}
+                ],
+                stream=False,
+                temperature=0.3,
+            )
+            return response.choices[0].message.content,response.usage.prompt_tokens
         except Exception as e:
             return f"⚠️ 生成回答失败：{e}"
