@@ -16,5 +16,4 @@ api.log
 chroma_db/
 base_knowledge/uploads/
 base_knowledge/user_chunks.json
-models/
 tavaliy-api.txt
