@@ -23,7 +23,7 @@ def retrieve(query:str,top_k:int)->list[str]:
     return results['documents'][0]
 
 def rerank(query: str, retrieve_chunks: List[str], top_k: int) -> list[str]:
-        cross_encoder = CrossEncoder('cross-encoder/mmarco-mMiniLMv2-L12-H384-v1',local_files_only=True)
+        cross_encoder = CrossEncoder("./models/cross-encoder",local_files_only=True)
         pairs = [(query, chunk) for chunk in retrieve_chunks]
         score = cross_encoder.predict(pairs)
         chunk_with_score_list = [(chunk, score) for chunk, score in zip(retrieve_chunks, score)]
